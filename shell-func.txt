@@ -1,0 +1,148 @@
+function create()
+{
+    # Initialize variables
+    instance=$1
+    name=$2
+    env='prod'
+    enableReact=false
+
+    # Get flag options
+    while [ $# -gt 0 ]; do
+	  case $1 in
+	    -d | --dev)
+		    env='dev'
+		    ;;
+	    -r | --with-react)
+            enableReact=true
+            ;;
+        -dr | -rd)
+            env='dev'
+            enableReact=true
+            ;;
+        \?)
+            print -P "\n%F{red}invalid flag%f"
+            return 0
+            ;;
+	    esac
+	    shift
+    done
+
+    # Verify it's a proper project type
+    print -P "\n%F{blue}Creating new $instance project%f"
+    if [[ $instance != 'django' ]]
+    then
+      print -P "\n\- %F{red}Not a valid instance to create: %f$instance\n"
+	    return 0
+    else
+	    print -P "\nCreating new %F{green}instance%f"
+    fi
+
+    # Verify project name
+    if [[ -z "$name" || $name == '' || $name == -* ]]
+    then
+	    print -P "\- %F{red}No project name provided for $instance project%f\n"
+	    return 0
+    fi
+
+    # Move to proper project folder
+    print -P "\- Moving to 'sites/test.python'"
+    cd ~/Sites/tests.python/
+    print -P "\- Creating project directory"
+    mkdir $name
+    cd $name
+    print -P "%F{green}done%f\n"
+
+    # Install and activate virtual environment
+    print -P "Installing %F{green}'venv'%f"
+    print -P "\- Creating virtual environment"
+    python -m venv $name"_env"
+    print -P "\- Activating virtual environment"
+    source ./$name"_env"/bin/activate
+    print -P "%F{green}done%f\n"
+
+    # Verify django installation
+    print -P "Installing %F{green}'$instance'%f"
+    version=$(django-admin --version)
+    if [[ -z $version || $version == '' ]]
+    then
+	    print -P "\- Installing django"
+    else
+	    print -P "\- Django version $version installed"
+    fi
+    pip install django &> /dev/null
+
+    # Create django project
+    print -P "\- Starting project"
+    django-admin startproject $name
+    if [[ $? == 1 ]]
+    then
+	    print -P "%F{red}Rolling back all changes\n"
+	    deactivate
+	    rm -R $name"_env"
+	    cd
+	    return 0
+    fi
+    print -P "%F{green}done%f\n"
+
+    # React installation
+    print -P "Installing %F{green}'react'%f"
+    if [[ $enableReact == true ]]
+    then
+        print -P "\- Adding front-end modules"
+        npx create-react-app $name"_fe" &> /dev/null
+        cd $name"_fe"
+        print -P "\- Installing packages"
+        npm install &> /dev/null
+        cd ../
+    else
+        print -P "\- No front-end feature selected"
+    fi
+    print -P "%F{green}done%f\n"
+
+    # Get project ready - Restructure project
+    print -P "%F{green}'$name'%f project setup"
+    print -P "\- Creating folder structure"
+    print -P "  \- project"
+    print -P "  \-\- project_be   (django)"
+    mv ./$name/ ./$name"_be"/
+    print -P "  \-\- project_env  (python env)"
+    if [[ $enableReact == true ]]
+    then
+        print -P "  \-\- project_fe  (react)"
+    fi
+
+    # Open project
+    print -P "\- Opening project in PyCharm"
+    pycharm .
+
+    # Update git
+    if [[ $enableReact == true ]]
+    then
+        print -P "\- Update git project"
+        mv $name"_fe"/.git .git
+        mv $name"_fe"/.gitignore .gitignore
+    else
+        print -P "\- Create git project"
+        git init
+    fi
+
+    # Copy initial configuration files
+    print -P "\- Copy initial configuration files"
+    cp ../.templates/config.py $name"_be"/$name/config.py
+    cp ../.templates/README.md README.md
+    print -P "%F{green}done%f\n"
+
+    # Start server
+    if [[ $env == 'dev' ]]
+    then
+        print -P "Starting backend server in %F{136}'development mode'%f"
+        force='--insecure'
+    else
+        print -P "Starting backend server in %F{136}'production mode'%f"
+        force=''
+    fi
+    cd $name"_be"
+    server=${name/_/-}
+    python manage.py runserver $server".test:8000" $force
+    cd ..
+}
